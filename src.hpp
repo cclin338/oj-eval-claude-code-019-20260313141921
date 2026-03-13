@@ -55,10 +55,9 @@ void Calculate(std::vector<Matrix *> keys, std::vector<Matrix *> values,
       }
     }
 
-    // Move Q, K, V to SRAM for computation
+    // Move Q and K to SRAM for computation (keep V in HBM for now to save SRAM)
     gpu_sim.MoveMatrixToSharedMem(current_query);
     gpu_sim.MoveMatrixToSharedMem(K);
-    gpu_sim.MoveMatrixToSharedMem(V);
 
     // Transpose K to get K^T
     gpu_sim.Transpose(K, kInSharedMemory);
@@ -67,8 +66,9 @@ void Calculate(std::vector<Matrix *> keys, std::vector<Matrix *> values,
     Matrix* QK = matrix_memory_allocator.Allocate("QK");
     gpu_sim.MatMul(current_query, K, QK);
 
-    // Release K as we don't need it anymore
+    // Release K and Q to free SRAM
     gpu_sim.ReleaseMatrix(K);
+    gpu_sim.ReleaseMatrix(current_query);
 
     // Compute Softmax row-wise on QK
     // Softmax(x)[j] = exp(x[j]) / sum(exp(x[j]))
@@ -103,6 +103,9 @@ void Calculate(std::vector<Matrix *> keys, std::vector<Matrix *> values,
     }
 
     gpu_sim.ReleaseMatrix(QK_exp);
+
+    // Now move V to SRAM for final multiplication
+    gpu_sim.MoveMatrixToSharedMem(V);
 
     // Compute Softmax(QK) * V = [i+1, i+1] * [i+1, d] = [i+1, d]
     Matrix* result = matrix_memory_allocator.Allocate("result");
