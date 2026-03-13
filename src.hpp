@@ -24,7 +24,10 @@ void Calculate(std::vector<Matrix *> keys, std::vector<Matrix *> values,
     // current_query is shape [i+1, d]
     // keys[j] and values[j] are shape [1, d]
 
-    // Concatenate all keys vertically to get K of shape [i+1, d]
+    // Strategy: Build K and V in HBM first (to avoid duplicate memory transfers)
+    // Then move the concatenated versions to SRAM for computation
+
+    // Concatenate all keys in HBM
     Matrix* K = nullptr;
     for (size_t j = 0; j <= i; ++j) {
       if (K == nullptr) {
@@ -38,7 +41,7 @@ void Calculate(std::vector<Matrix *> keys, std::vector<Matrix *> values,
       }
     }
 
-    // Concatenate all values vertically to get V of shape [i+1, d]
+    // Concatenate all values in HBM
     Matrix* V = nullptr;
     for (size_t j = 0; j <= i; ++j) {
       if (V == nullptr) {
@@ -73,7 +76,7 @@ void Calculate(std::vector<Matrix *> keys, std::vector<Matrix *> values,
     gpu_sim.MatExp(QK, QK_exp);
     gpu_sim.ReleaseMatrix(QK);
 
-    // For each row, compute sum of exponentials
+    // For each row, compute sum of exponentials and normalize
     Matrix* softmax_result = matrix_memory_allocator.Allocate("softmax");
     for (size_t row = 0; row <= i; ++row) {
       Matrix* row_data = matrix_memory_allocator.Allocate("row");
